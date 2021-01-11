@@ -3,10 +3,39 @@ from django.contrib.auth.models import User
 from . models import Post
 from django.views.generic import ListView, DetailView, CreateView, UpdateView , DeleteView
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from taggit.models import Tag
+from django.template.defaultfilters import slugify
+from . forms import PostForm
 
 def home(request):
+    #context = {
+    #'posts': Post.objects.all()
+    #}
+    posts = Post.objects.order_by('-published')
+    # Show most common tags
+    common_tags = Post.tags.most_common()[:4]
+    form = PostForm(request.POST)
+    if form.is_valid():
+        newpost = form.save(commit=False)
+        newpost.slug = slugify(newpost.title)
+        newpost.save()
+        # Without this next line the tags won't be saved.
+        form.save_m2m()
     context = {
-    'posts': Post.objects.all()
+        'posts':posts,
+        'common_tags':common_tags,
+        'form':form,
+    }
+
+    return render(request, 'portfolio/home.html', context)
+
+def tagged(request, slug):
+    tag = get_object_or_404(Tag, slug=slug)
+    # Filter posts by tag name
+    posts = Post.objects.filter(tags=tag)
+    context = {
+        'tag':tag,
+        'posts':posts,
     }
     return render(request, 'portfolio/home.html', context)
 
@@ -26,6 +55,8 @@ class UserPostListView(ListView):
     ordering = ['-date_posted'] #- for oldest
     paginate_by = 5
 
+
+
     def get_queryset(self):
         user = get_object_or_404(User, username=self.kwargs.get('username'))
         return Post.objects.filter(author=user).order_by('-date_posted')
@@ -37,7 +68,7 @@ class PostDetailView(DetailView):
 
 class PostCreateView(LoginRequiredMixin, CreateView):
     model = Post
-    fields = ['title', 'content']
+    fields = ['title', 'content', 'header_image', 'tags']
 
     def form_valid(self, form):
         form.instance.author = self.request.user
